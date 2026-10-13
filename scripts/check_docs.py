@@ -12,7 +12,11 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def main() -> None:
-    errors = []
+    errors = [
+        "Personal document in public tree / 公开目录包含私人文档: " + str(path.relative_to(ROOT))
+        for path in sorted((ROOT / "docs").rglob("*"))
+        if path.is_file() and path.name.upper() in {"RESUME.MD", "PROJECT_TALK.MD"}
+    ]
     docs = [ROOT / "README.md", ROOT / "README_zh.md"]
     docs += sorted((ROOT / "docs").rglob("*.md"))
     docs += [

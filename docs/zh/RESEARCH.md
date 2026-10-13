@@ -1,5 +1,7 @@
 # 研究设计与数学约定
 
+**源码边界（2026-10-13）：** 修复近似并列一致性后，各模式候选评分统一使用未优化路径的逐行 `einsum` 内核。本页全部10.20倍结果和BLAS扫描比较均属于已存档的9月旧源码，不是当前内核的实测。当前内核性能**尚未测量**。[修复、准确存档和新协议](NUMERICAL_REPAIR.md)。
+
 [English](../en/RESEARCH.md) · [主页](../../README_zh.md) · [实验](EXPERIMENTS.md)
 
 ## 定位与选题
@@ -24,14 +26,14 @@
 |---|---|---|
 | Ram 与 Gray，*Maximum Inner-Product Search using Tree Data-structures*（2012 年[预印本](https://arxiv.org/abs/1202.6101)）；发表版本为 *Maximum Inner-Product Search Using Cone Trees*（[作者 PDF](https://rithram.github.io/research/papers/2012/RG_KDD12.pdf)）。 | 内积 branch-and-bound、角锥，以及球/锥上界。 | 历史与数学基础。CapPrune 使用平坦分块，并非其单树/双树实现；角度上界是已有几何知识。 |
 | Dhillon 与 Modha，*Concept Decompositions for Large Sparse Text Data Using Clustering*（2001 年，[作者 PDF](https://www.cs.utexas.edu/~inderjit/public_papers/concept_mlj.pdf)、[出版记录](https://doi.org/10.1023/A:1007612920971)）。 | 使用归一化簇中心的球面 k-means。 | 聚类方法来源，本项目实现面向稠密数组；球面 k-means 与归一化中心都不是新贡献。 |
-| Abuzaid 等，*To Index or Not to Index: Optimizing Exact Maximum Inner Product Search*（[预印本](https://arxiv.org/abs/1706.01449)、[2019 年作者 PDF](https://people.eecs.berkeley.edu/~matei/papers/2019/icde_optimizing_mips.pdf)）。 | 高效使用硬件的稠密计算可能在某些输入上优于剪枝索引，性能依赖工作负载。 | 保留实用连续 BLAS 扫描基线与负面结果的理由。本项目不复现 MAXIMUS 或 OPTIMUS。 |
+| Abuzaid 等，*To Index or Not to Index: Optimizing Exact Maximum Inner Product Search*（[预印本](https://arxiv.org/abs/1706.01449)、[2019 年作者 PDF](https://people.eecs.berkeley.edu/~matei/papers/2019/icde_optimizing_mips.pdf)）。 | 高效使用硬件的稠密计算可能在某些输入上优于剪枝索引，性能依赖工作负载。 | 历史保留连续 BLAS 扫描基线与负面结果的理由。本项目不复现 MAXIMUS 或 OPTIMUS。 |
 | Faiss [索引文档](https://github.com/facebookresearch/faiss/wiki/Faiss-indexes)、[度量文档](https://github.com/facebookresearch/faiss/wiki/MetricType-and-distances)、[库论文](https://arxiv.org/abs/2401.08281)。 | Flat 内积检索穷举全部向量；余弦检索需要归一化；向量检索仍是活跃的系统问题。 | 提供背景与基线设计参考。本仓库实测比较使用 NumPy float64，并非 Faiss float32；不宣称性能优于 Faiss。 |
 
-本项目的贡献是可审阅的工程实现：连续分块存储、保守浮点上界、按原始行号确定性处理同分、关闭剪枝的消融路径、经验证的持久化、明确的资源控制，以及关联源码的可复现实验证据。它不是新几何定理、新聚类算法、完整文献复现，也不声称 SOTA。NumPy 与其 BLAS 后端提供稠密数值内核；CapPrune 实现分区构建、上界计算、遍历、top-k 组织及公共执行约定。
+本项目的贡献是可审阅的工程实现：连续分块存储、保守浮点上界、按原始行号确定性处理同分、关闭剪枝的消融路径、经验证的持久化、明确的资源控制，以及关联源码的可复现实验证据。它不是新几何定理、新聚类算法、完整文献复现，也不声称 SOTA。NumPy 提供共享逐行候选评分内核，其 BLAS 后端仍执行其他稠密运算；CapPrune 实现分区构建、上界计算、遍历、top-k 组织及公共执行约定。
 
 ## 研究问题与冻结验收
 
-**问题：** 保守球冠分块剪枝在什么条件下能够保持精确余弦 top-k，同时降低相对于连续 BLAS 扫描的单线程 CPU 延迟？
+**9月历史问题：** 保守球冠分块剪枝在什么条件下能够保持精确余弦 top-k，同时降低相对于连续 BLAS 扫描的单线程 CPU 延迟？
 
 **假设：** 紧凑、分离的簇允许拒绝大量完整分块。高维各向同性数据形成较宽且重叠的球冠；较小集合则没有足够向量计算量抵消 Python 调用、上界和候选合并开销。增大 k 可能推迟剪枝。构建成本使该机制更适用于多次复用同一索引的场景。
 
@@ -89,7 +91,7 @@ $$
 
 上述证明基于实数运算。实现使用 float64 归一化和内积，以 `64 * eps * d` 向下放宽 s、向上放宽 a，最后对上界增加向外余量并使用 `nextafter`。接近 ±1 时，平方根具有较强敏感性，仅在最终分数上添加极小 epsilon 并不充分；放宽球冠与角度输入用来处理这一失败模式。先缩放再归一化避免有限极端幅值的上溢/下溢。零向量、NaN、无穷大、维度不匹配及非法 k 均显式拒绝。
 
-实际承诺是采用该剪枝算法的精确搜索，以及所声明的 float64 一致性验证。这不等于对所有 BLAS 实现和对抗性 IEEE-754 输入给出形式化区间算术证明，有限测试也无法证明更强的声明。不同稠密内核的微小运算差异还可能改变数学上近似相等分数的顺序；报告的一致性相对于统一 float64 基线与已声明的同分规则。[代码导读](WALKTHROUGH.md) 将公式和保护措施对应到实际实现。
+实际承诺是采用该剪枝算法的精确搜索，以及所声明的 float64 一致性验证。这不等于对所有 BLAS 实现和对抗性 IEEE-754 输入给出形式化区间算术证明，有限测试也无法证明更强的声明。旧BLAS调用会因矩阵大小而在合法近似并列输入上改变排序。当前候选评分在所有布局共享同一逐行内核，不裁剪或取整分数。它修复已观察到的模式不一致，不证明跨平台逐位一致或形式化区间可靠性。[代码导读](WALKTHROUGH.md) 将公式和保护措施对应到实际实现。
 
 ## 不变量与复杂度
 

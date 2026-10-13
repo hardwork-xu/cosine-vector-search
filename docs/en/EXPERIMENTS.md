@@ -1,10 +1,12 @@
 # Experiments and limits of the evidence
 
+**Source boundary (2026-10-13):** candidate scoring now uses the same nonoptimized rowwise `einsum` kernel in every mode after a near-tie consistency repair. All 10.20× results and BLAS-scan comparisons on this page belong to the archived September source; they are not measurements of the current kernel. Current-kernel performance is **not yet measured**. [Repair, exact archive and new protocol](NUMERICAL_REPAIR.md).
+
 [简体中文](../zh/EXPERIMENTS.md) · [Home](../../README.md) · [Research contract](RESEARCH.md)
 
-## Main finding
+## Historical September finding
 
-On this Apple M1 Pro CPU run, spherical-cap pruning achieved **10.20× median single-query speedup** over a contiguous float64 scan on the prespecified **synthetic clustered 50,000×64, k=10** workload, scoring **2.34%** of vectors on average. The benefit is strongly distribution-dependent: **real digits took 4.40× as long as scan**, isotropic 50,000×64 took **1.60×**, and the 32-vector, k=N boundary case took **3.69×**. These negative results are part of the delivered evidence. This is neither a pretrained-embedding benchmark nor an application end-to-end result.
+On the historical September Apple M1 Pro CPU run, spherical-cap pruning achieved **10.20× median single-query speedup** over a contiguous float64 scan on the prespecified **synthetic clustered 50,000×64, k=10** workload, scoring **2.34%** of vectors on average. The benefit is strongly distribution-dependent: **real digits took 4.40× as long as scan**, isotropic 50,000×64 took **1.60×**, and the 32-vector, k=N boundary case took **3.69×**. These negative results are part of the delivered evidence. This is neither a pretrained-embedding benchmark nor an application end-to-end result.
 
 ## Record, source, and environment
 
@@ -34,7 +36,7 @@ The protocol covers seven cases, each with 40 query vectors, seven repetitions, 
 - Synthetic isotropic cases use independent Gaussian vectors and queries: 50,000×64, k=10, 64 clusters; and the 32×8 boundary case with k=32 and eight clusters.
 - `digits_real` uses scikit-learn 1.7.2's bundled `load_digits` raw 8×8 pixel intensities. A seeded permutation supplies 40 held-out query rows and 1,757 index rows, with k=10 and 32 clusters. It uses no trained model or embedding network and measures numerical retrieval, not classification accuracy or semantic relevance. Dataset attribution is retained in [NOTICE](../../NOTICE.md).
 
-All modes use the same normalized float64 vectors, queries, k, thread request, and deterministic score/ID top-k routine. `scan` is a practical contiguous NumPy/BLAS matrix-vector product plus partial selection; it is not a Python row-by-row strawman. `blocked` uses the packed layout and visits every block without computing bounds, isolating the effect of bound-driven pruning from packing, dispatch, and merging overhead. `pruned` calculates bounds, orders blocks, and skips only provably uncompetitive blocks subject to the documented float64 guard.
+All modes use the same normalized float64 vectors, queries, k, thread request, and deterministic score/ID top-k routine. In that historical implementation, `scan` was a practical contiguous NumPy/BLAS matrix-vector product plus partial selection; it is not a Python row-by-row strawman. `blocked` uses the packed layout and visits every block without computing bounds, isolating the effect of bound-driven pruning from packing, dispatch, and merging overhead. `pruned` calculates bounds, orders blocks, and skips only provably uncompetitive blocks subject to the documented float64 guard.
 
 The retained original layout exists to support the scan baseline, while the packed layout supports block traversal. Both reside in the same index during measurement, making this a latency comparison with a shared memory budget, not a claim that the pruning index uses less memory than a scan-only implementation. The matrix-query API processes one query at a time. It is not a large-batch GEMM baseline or a comparison with Faiss, approximate indexes, or float32 retrieval.
 
@@ -106,10 +108,10 @@ The k=10 and k=100 clustered cases use different seeds and therefore different d
 
 ## Reproduce and retain evidence
 
-From the project root after the locked development installation:
+The commands below measure the corrected current kernel under the new protocol; they do not recreate the historical BLAS result. From the project root after the locked development installation:
 
 ```sh
-.venv/bin/python benchmark.py --output results/reproduction.json
+PYTHONPATH=src .venv/bin/python benchmark.py --config configs/protocol-rowwise-20261013.json --output results/reproduction.json
 .venv/bin/python scripts/validate_results.py results/reproduction.json
 .venv/bin/python scripts/analyze.py results/reproduction.json --output-dir results/reproduction-analysis
 .venv/bin/python -m pytest -q

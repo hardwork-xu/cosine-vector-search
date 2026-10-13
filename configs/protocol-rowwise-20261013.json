@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "frozen_before_measurement": true,
+  "research_question": "When does spherical-cap pruning reduce query latency against the same rowwise float64 scoring kernel while preserving bitwise scores and ordered IDs?",
+  "hypothesis": "Tight separated clusters permit substantial pruning; isotropic high-dimensional vectors and small databases can be slower due to loose caps and dispatch overhead.",
+  "primary_target": {
+    "case": "clustered_n50000_d64",
+    "metric": "median_query_speedup_over_scan",
+    "minimum": 1.5
+  },
+  "secondary_target": {
+    "case": "clustered_n50000_d64",
+    "metric": "mean_evaluated_fraction",
+    "maximum": 0.3
+  },
+  "correctness": {
+    "exact_ordered_ids": true,
+    "score_atol": 0,
+    "score_rtol": 0
+  },
+  "threads": 1,
+  "seed": 20260921,
+  "repetitions": 7,
+  "warmup_queries": 4,
+  "queries_per_case": 40,
+  "cluster_iterations": 6,
+  "assignment_budget_bytes": 16777216,
+  "modes": [
+    "scan",
+    "blocked",
+    "pruned"
+  ],
+  "measurement": "Each mode gets the same single-query API, k, float64 vectors, thread count, and queries. Randomize mode and query order per repetition. Timer includes input validation, normalization, bounds, vector scoring, top-k, and result allocation, excludes data generation/build/load. Build, load, serialization and first call recorded separately. Report median and IQR over all query samples and per-repeat medians; no tail-latency claim. All valid samples retained. Existing seven cases retain their original positions/seeds; the 500-row scale is appended. Cross-size cases use different seeds and are workload coverage, not a controlled scaling law. Old/current timings must not be pooled.",
+  "cases": [
+    {
+      "name": "clustered_n5000_d64",
+      "kind": "clustered",
+      "n": 5000,
+      "d": 64,
+      "clusters": 32,
+      "k": 10,
+      "noise": 0.035
+    },
+    {
+      "name": "clustered_n50000_d64",
+      "kind": "clustered",
+      "n": 50000,
+      "d": 64,
+      "clusters": 64,
+      "k": 10,
+      "noise": 0.035
+    },
+    {
+      "name": "clustered_n50000_d128",
+      "kind": "clustered",
+      "n": 50000,
+      "d": 128,
+      "clusters": 64,
+      "k": 10,
+      "noise": 0.035
+    },
+    {
+      "name": "isotropic_n50000_d64",
+      "kind": "isotropic",
+      "n": 50000,
+      "d": 64,
+      "clusters": 64,
+      "k": 10
+    },
+    {
+      "name": "clustered_n50000_k100",
+      "kind": "clustered",
+      "n": 50000,
+      "d": 64,
+      "clusters": 64,
+      "k": 100,
+      "noise": 0.035
+    },
+    {
+      "name": "digits_real",
+      "kind": "digits",
+      "n": 1757,
+      "d": 64,
+      "clusters": 32,
+      "k": 10
+    },
+    {
+      "name": "tiny_k_equals_n",
+      "kind": "isotropic",
+      "n": 32,
+      "d": 8,
+      "clusters": 8,
+      "k": 32
+    },
+    {
+      "name": "clustered_n500_d64",
+      "kind": "clustered",
+      "n": 500,
+      "d": 64,
+      "clusters": 16,
+      "k": 10,
+      "noise": 0.035
+    }
+  ],
+  "not_claimed": [
+    "new geometric algorithm",
+    "approximate ANN comparison",
+    "GPU acceleration",
+    "production-scale embeddings",
+    "model inference speedup",
+    "end-to-end application latency",
+    "speedup over BLAS with the corrected rowwise kernel",
+    "historical timing valid for changed source",
+    "bitwise equality across NumPy versions or hardware"
+  ],
+  "protocol_id": "rowwise-score-repair-20261013",
+  "premeasurement_date": "2026-10-13",
+  "supersedes_performance_claim": false,
+  "revision_reason": "Candidate scoring changed from shape-dependent BLAS matvec to a shared nonoptimized einsum kernel after a legal-input near-tie counterexample. This is a new measurement, not validation of historical 10.20x BLAS-relative speedup.",
+  "scoring_kernel": "numpy.einsum(\"ij,j->i\", vectors, query, optimize=False); same kernel for scan/blocked/pruned; no claim against an optimized BLAS scan",
+  "historical_run_id": "140ea5bb-9c95-4e8a-b2ab-17bcde0903ca",
+  "historical_protocol_sha256": "37051f3d41600e4a67b4ee0c06f1eba2fd4ae4fa1d9a49b30bb4aa081a709acc"
+}

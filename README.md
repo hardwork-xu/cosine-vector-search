@@ -18,7 +18,9 @@ The contribution is a complete CPU implementation of block construction, conserv
 
 ## Scope and status
 
-Validated locally on macOS 26.6.2 arm64, Apple M1 Pro, 16 GiB, Python 3.12.2, NumPy 2.2.6 / Accelerate: all three search paths (`scan`, `blocked`, `pruned`), API, bilingual CLI, offline demo, atomic save/reload, 70 tests and package installation. [GitHub Actions on Ubuntu 24.04](https://github.com/hardwork-xu/cosine-vector-search/actions/runs/35602650743) also passed the same 70-test suite, static/type checks, package build, benchmark smoke, plot generation, and Docker build/run. Python 3.12 is the declared version range. Full performance measurements remain macOS-only; CI smoke is not a Linux performance claim. See [publication evidence](results/publication.json). No GPU backend, online updates, sparse vectors, embedding model or service is provided.
+**2026-10-13 numerical repair:** legal near-tie inputs exposed scan/block score-order differences. All modes now share one rowwise scoring kernel. The focused core/regression suite passes 69 tests locally; current-kernel performance and remote CI have not yet been revalidated. All performance tables below, including 10.20×, describe the archived September source only. [Repair and new measurement protocol](docs/en/NUMERICAL_REPAIR.md).
+
+**Historical September validation:** Validated locally on macOS 26.6.2 arm64, Apple M1 Pro, 16 GiB, Python 3.12.2, NumPy 2.2.6 / Accelerate: all three search paths (`scan`, `blocked`, `pruned`), API, bilingual CLI, offline demo, atomic save/reload, 70 tests and package installation. [GitHub Actions on Ubuntu 24.04](https://github.com/hardwork-xu/cosine-vector-search/actions/runs/35602650743) also passed the same 70-test suite, static/type checks, package build, benchmark smoke, plot generation, and Docker build/run. Python 3.12 is the declared version range. Full performance measurements remain macOS-only; CI smoke is not a Linux performance claim. See [publication evidence](results/publication.json). No GPU backend, online updates, sparse vectors, embedding model or service is provided.
 
 The algorithm is exact in real arithmetic; guarded float64 output is checked against the scan baseline. This is not a formal interval-arithmetic certification for every adversarial input or BLAS implementation. Equal computed scores use ascending original row ID.
 
@@ -33,7 +35,7 @@ flowchart LR
   D --> E
   E --> F[Score surviving blocks / 计算保留分块]
   F --> G[Stable exact top-k / 稳定精确排序]
-  B --> H[Contiguous BLAS scan / 全库扫描基线]
+  B --> H[Shared-kernel full scan / 同内核全库扫描]
   H --> G
 ```
 
@@ -76,14 +78,14 @@ The CLI accepts your own finite nonzero dense `.npy` arrays; rows are vectors. T
 .venv/bin/python examples/demo.py
 .venv/bin/capprune build vectors.npy index.npz --clusters 64
 .venv/bin/capprune query index.npz queries.npy --k 10 --mode pruned --output matches.json
-.venv/bin/python benchmark.py --output results/my-run.json
+PYTHONPATH=src .venv/bin/python benchmark.py --config configs/protocol-rowwise-20261013.json --output results/my-run.json
 .venv/bin/python scripts/analyze.py results/my-run.json --output-dir results/my-analysis
 .venv/bin/python scripts/validate_results.py results/reference.json
 ```
 
 Empty query batches are accepted; empty indexes, zero/nonfinite vectors, invalid dimensions, invalid budgets and k outside `[1,N]` are rejected. Index loading disables pickle and reconstructs bound metadata. Load only trusted-size files: decompression memory is not sandboxed. Full contracts and error behavior are in [ARCHITECTURE.md](docs/en/ARCHITECTURE.md).
 
-## Target versus measured results
+## Historical September targets and results
 
 Targets were committed before performance measurement in [protocol.json](configs/protocol.json). The official run used 40 queries per case, 7 repetitions, 4 warmup queries, randomized mode/query order and online batch size 1. Both modes use identical float64 inputs and the same CPU/backend. `VECLIB_MAXIMUM_THREADS=1`, `OPENBLAS_NUM_THREADS=1` and `OMP_NUM_THREADS=1` request a one-thread budget; Accelerate's actual thread count is not directly introspectable through threadpoolctl.
 
@@ -103,9 +105,9 @@ Targets were committed before performance measurement in [protocol.json](configs
 | digits_real | 0.0512 | 0.2590 | 0.2251 | 0.23× | 84.4% | 6.6 |
 | tiny_k_equals_n | 0.0170 | 0.0512 | 0.0629 | 0.27× | 100.0% | 0.6 |
 
-The 10.20× primary result is for **favorable synthetic clustered data**, not production embeddings. Real digits are about 4.4× slower than scan; isotropic vectors and tiny k=N inputs are also slower. A tight cap reduces scoring; weak caps leave dispatch and candidate merging as extra cost. No universal speedup, ANN superiority, model inference acceleration or relevance improvement is claimed.
+The historical 10.20× primary result, measured with the archived old kernel, is for **favorable synthetic clustered data**, not production embeddings. Real digits are about 4.4× slower than scan; isotropic vectors and tiny k=N inputs are also slower. A tight cap reduces scoring; weak caps leave dispatch and candidate merging as extra cost. No universal speedup, ANN superiority, model inference acceleration or relevance improvement is claimed.
 
-![Measured speedup and work fraction](results/analysis/benchmark.png)
+![Historical September speedup and work fraction](results/analysis/benchmark.png)
 
 Tables and plots are generated from [all raw samples](results/reference.json) by [analyze.py](scripts/analyze.py). [Summary JSON](results/analysis/summary.json) includes IQRs, per-repeat medians, throughput, index payload and conservative build break-even estimates. Search timing includes validation, normalization, bounds, scoring, selection and result allocation. Build, serialization and loading are recorded separately; these are not application end-to-end measurements. RSS is a cumulative process metric, not a method-specific memory claim. See [the full protocol and negative results](docs/en/EXPERIMENTS.md).
 
@@ -115,7 +117,7 @@ I intend to keep this project focused on understandable search mechanisms and re
 
 Code is [MIT licensed](LICENSE). Third-party dependencies and the real digits dataset retain their own licenses and attribution in [NOTICE.md](NOTICE.md). Cite “CapPrune: auditable exact cosine search, version 0.1.0” and the source revision used. The public source repository is [hardwork-xu/cosine-vector-search](https://github.com/hardwork-xu/cosine-vector-search). No DOI, package-registry publication, hosted GitHub release or public service is claimed. `CITATION.cff` is omitted because full public author metadata has not been established.
 
-Public history starts with a sanitized source snapshot. The original local commit IDs in [development history](docs/en/DEVELOPMENT.md) and experiment records are preserved provenance references; they are not commits available on this public remote. Per-file SHA-256 values in the raw evidence allow verification that the numerical core and frozen protocol match the measured source. Private local Git identity metadata is excluded from the public repository.
+Public history starts with a sanitized source snapshot. The original local commit IDs in [development history](docs/en/DEVELOPMENT.md) and experiment records are preserved provenance references; they are not commits available on this public remote. Per-file SHA-256 values in the raw evidence allow verification of the exact archived numerical core and unchanged frozen protocol used by the historical run; the corrected current core is a different source. Private local Git identity metadata is excluded from the public repository.
 
 ## Documentation
 
@@ -125,6 +127,5 @@ Public history starts with a sanitized source snapshot. The original local commi
 - [Development history](docs/en/DEVELOPMENT.md)
 - [Code walkthrough](docs/en/WALKTHROUGH.md)
 - [Release preparation and citation](docs/en/RELEASE.md)
-- [Resume evidence and project presentation](docs/en/RESUME.md)
 
 Validation evidence: [machine-readable checks](results/acceptance/checks.json), [public-file audit](results/acceptance/audit.json), [environment](results/environment.json).

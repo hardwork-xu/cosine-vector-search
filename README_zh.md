@@ -18,7 +18,9 @@
 
 ## 范围与状态
 
-已在 macOS 26.6.2 arm64、Apple M1 Pro、16 GiB、Python 3.12.2、NumPy 2.2.6 / Accelerate 上验证三条搜索路径（`scan`、`blocked`、`pruned`）、API、双语 CLI、离线演示、原子保存与重载、70 项测试及包安装。[Ubuntu 24.04 的 GitHub Actions](https://github.com/hardwork-xu/cosine-vector-search/actions/runs/35602650743) 也通过了相同的 70 项测试、静态/类型检查、包构建、基准冒烟测试、图表生成及 Docker 构建和运行。声明支持的 Python 范围为 3.12。完整性能测量仍仅来自 macOS，CI 冒烟测试不是 Linux 性能结论。详见[公开发布证据](results/publication.json)。不提供 GPU 后端、在线更新、稀疏向量、嵌入模型或服务层。
+**2026-10-13数值修复：** 合法的近似并列输入暴露扫描与分块评分顺序不一致。现已统一逐行评分内核。本地核心与回归共69项测试通过；新内核性能与远端CI尚未重新验证。下方所有性能表（含10.20倍）仅描述已存档的9月旧源码。[修复与新测量协议](docs/zh/NUMERICAL_REPAIR.md)。
+
+**9月历史验证：**已在 macOS 26.6.2 arm64、Apple M1 Pro、16 GiB、Python 3.12.2、NumPy 2.2.6 / Accelerate 上验证三条搜索路径（`scan`、`blocked`、`pruned`）、API、双语 CLI、离线演示、原子保存与重载、70 项测试及包安装。[Ubuntu 24.04 的 GitHub Actions](https://github.com/hardwork-xu/cosine-vector-search/actions/runs/35602650743) 也通过了相同的 70 项测试、静态/类型检查、包构建、基准冒烟测试、图表生成及 Docker 构建和运行。声明支持的 Python 范围为 3.12。完整性能测量仍仅来自 macOS，CI 冒烟测试不是 Linux 性能结论。详见[公开发布证据](results/publication.json)。不提供 GPU 后端、在线更新、稀疏向量、嵌入模型或服务层。
 
 算法在实数算术下精确；float64 实现通过保守余量保护，并与扫描基线核对。这不是针对所有对抗性输入及 BLAS 实现的形式化区间算术认证。计算分数相同时，按原始行 ID 升序排列。
 
@@ -33,7 +35,7 @@ flowchart LR
   D --> E
   E --> F[Score surviving blocks / 计算保留分块]
   F --> G[Stable exact top-k / 稳定精确排序]
-  B --> H[Contiguous BLAS scan / 全库扫描基线]
+  B --> H[Shared-kernel full scan / 同内核全库扫描]
   H --> G
 ```
 
@@ -76,14 +78,14 @@ CLI 接受自己的有限、非零、稠密 `.npy` 数组，每行一个向量�
 .venv/bin/python examples/demo.py
 .venv/bin/capprune build vectors.npy index.npz --clusters 64
 .venv/bin/capprune query index.npz queries.npy --k 10 --mode pruned --output matches.json
-.venv/bin/python benchmark.py --output results/my-run.json
+PYTHONPATH=src .venv/bin/python benchmark.py --config configs/protocol-rowwise-20261013.json --output results/my-run.json
 .venv/bin/python scripts/analyze.py results/my-run.json --output-dir results/my-analysis
 .venv/bin/python scripts/validate_results.py results/reference.json
 ```
 
 允许空查询批次；拒绝空索引、零向量、非有限值、维度不符、非法预算及不在 `[1,N]` 内的 k。加载索引禁用 pickle 并重新计算上界元数据。只加载大小可信的文件，解压内存没有沙箱限制。完整接口与错误行为见[架构文档](docs/zh/ARCHITECTURE.md)。
 
-## 目标与实测结果
+## 9月历史目标与实测结果
 
 目标在性能测量前提交到 [protocol.json](configs/protocol.json)。正式运行每个场景使用 40 条查询、7 次重复、4 条预热查询、随机模式/查询顺序，在线批大小为 1。各模式使用相同 float64 输入和 CPU 后端。设置 `VECLIB_MAXIMUM_THREADS=1`、`OPENBLAS_NUM_THREADS=1` 和 `OMP_NUM_THREADS=1` 请求线程预算为 1；threadpoolctl 无法直接内省 Accelerate 的实际线程数。
 
@@ -103,9 +105,9 @@ CLI 接受自己的有限、非零、稠密 `.npy` 数组，每行一个向量�
 | digits_real | 0.0512 | 0.2590 | 0.2251 | 0.23× | 84.4% | 6.6 |
 | tiny_k_equals_n | 0.0170 | 0.0512 | 0.0629 | 0.27× | 100.0% | 0.6 |
 
-主场景 10.20 倍收益来自**有利的合成聚类数据**，不是生产嵌入数据。真实手写数字场景比扫描约慢 4.4 倍；各向同性随机数据和极小 k=N 输入也更慢。紧致球冠可以减少评分；较松的球冠则留下额外调度与候选合并成本。本项目不宣称普遍加速、优于近似检索、加速模型推理或提高相关性。
+旧源码 9 月实测的主场景 10.20 倍收益来自**有利的合成聚类数据**，不是生产嵌入数据。真实手写数字场景比扫描约慢 4.4 倍；各向同性随机数据和极小 k=N 输入也更慢。紧致球冠可以减少评分；较松的球冠则留下额外调度与候选合并成本。本项目不宣称普遍加速、优于近似检索、加速模型推理或提高相关性。
 
-![实测加速比与评分比例](results/analysis/benchmark.png)
+![9月历史加速比与评分比例](results/analysis/benchmark.png)
 
 表格和图由 [analyze.py](scripts/analyze.py) 根据[全部原始样本](results/reference.json)自动生成。[汇总 JSON](results/analysis/summary.json)包含四分位数、每轮中位数、吞吐、索引数组占用及保守构建摊销估计。查询计时包含校验、归一化、上界、评分、选择及结果分配；构建、保存和加载单独记录。这不是应用端到端测量。RSS 是进程累计口径，不能当作某个算法的独立内存占用。详见[完整协议及退化结果](docs/zh/EXPERIMENTS.md)。
 
@@ -115,7 +117,7 @@ CLI 接受自己的有限、非零、稠密 `.npy` 数组，每行一个向量�
 
 代码采用 [MIT 许可证](LICENSE)。第三方依赖与真实手写数字数据集保留各自许可证及归属，见 [NOTICE_zh.md](NOTICE_zh.md)。引用时使用“CapPrune: auditable exact cosine search, version 0.1.0”并附使用的源码 revision。公开源码仓库为 [hardwork-xu/cosine-vector-search](https://github.com/hardwork-xu/cosine-vector-search)。本项目没有宣称已分配 DOI、发布到软件包平台、创建托管 GitHub release 或部署公网服务。由于尚未确认完整的公开作者元数据，未生成 `CITATION.cff`。
 
-公开历史从经过脱敏的源码快照开始。[开发记录](docs/zh/DEVELOPMENT.md)及实验记录中的原始本地提交 ID 作为来源证据保留，不是此公开远端上可访问的提交。原始证据中的逐文件 SHA-256 可用于核验数值核心与冻结协议和实测源码一致。公开仓库排除私人本地 Git 身份元数据。
+公开历史从经过脱敏的源码快照开始。[开发记录](docs/zh/DEVELOPMENT.md)及实验记录中的原始本地提交 ID 作为来源证据保留，不是此公开远端上可访问的提交。原始证据中的逐文件 SHA-256 可用于核验准确存档的旧数值核心和未变的冻结协议与历史实测源码一致；修复后的当前核心是不同的源码。公开仓库排除私人本地 Git 身份元数据。
 
 ## 文档导航
 
@@ -125,6 +127,5 @@ CLI 接受自己的有限、非零、稠密 `.npy` 数组，每行一个向量�
 - [实际开发记录](docs/zh/DEVELOPMENT.md)
 - [代码导读](docs/zh/WALKTHROUGH.md)
 - [发布准备与引用](docs/zh/RELEASE.md)
-- [简历证据与项目讲解](docs/zh/RESUME.md)
 
 验证证据：[机器可读验收](results/acceptance/checks.json)、[公开文件审计](results/acceptance/audit.json)、[环境记录](results/environment.json)。

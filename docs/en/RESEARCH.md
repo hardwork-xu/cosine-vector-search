@@ -1,5 +1,7 @@
 # Research design and mathematical contract
 
+**Source boundary (2026-10-13):** candidate scoring now uses the same nonoptimized rowwise `einsum` kernel in every mode after a near-tie consistency repair. All 10.20× results and BLAS-scan comparisons on this page belong to the archived September source; they are not measurements of the current kernel. Current-kernel performance is **not yet measured**. [Repair, exact archive and new protocol](NUMERICAL_REPAIR.md).
+
 [简体中文](../zh/RESEARCH.md) · [Home](../../README.md) · [Experiments](EXPERIMENTS.md)
 
 ## Positioning and choice
@@ -24,14 +26,14 @@ The sources below were accessed on 2026-09-21. The source list distinguishes an 
 |---|---|---|
 | Ram and Gray, *Maximum Inner-Product Search using Tree Data-structures* (2012 [preprint](https://arxiv.org/abs/1202.6101)); published as *Maximum Inner-Product Search Using Cone Trees* ([author PDF](https://rithram.github.io/research/papers/2012/RG_KDD12.pdf)). | Inner-product branch-and-bound, angular cones, and ball/cone bounds. | Historical and mathematical foundation. CapPrune uses a flat block partition, not their single/dual-tree implementation. The angular bound is established geometry. |
 | Dhillon and Modha, *Concept Decompositions for Large Sparse Text Data Using Clustering* (2001, [author PDF](https://www.cs.utexas.edu/~inderjit/public_papers/concept_mlj.pdf), [publication](https://doi.org/10.1023/A:1007612920971)). | Spherical k-means with normalized cluster centroids. | Source of the clustering approach, implemented here for dense arrays. Neither spherical k-means nor normalized centroids are new contributions. |
-| Abuzaid et al., *To Index or Not to Index: Optimizing Exact Maximum Inner Product Search* ([preprint](https://arxiv.org/abs/1706.01449), [2019 author PDF](https://people.eecs.berkeley.edu/~matei/papers/2019/icde_optimizing_mips.pdf)). | Hardware-efficient dense computation can beat pruning indexes on some inputs; performance depends on workload. | Reason to retain a practical contiguous BLAS scan and report negative cases. This project does not reproduce MAXIMUS or OPTIMUS. |
+| Abuzaid et al., *To Index or Not to Index: Optimizing Exact Maximum Inner Product Search* ([preprint](https://arxiv.org/abs/1706.01449), [2019 author PDF](https://people.eecs.berkeley.edu/~matei/papers/2019/icde_optimizing_mips.pdf)). | Hardware-efficient dense computation can beat pruning indexes on some inputs; performance depends on workload. | Reason the historical study retained a practical contiguous BLAS scan and reported negative cases. This project does not reproduce MAXIMUS or OPTIMUS. |
 | Faiss [index reference](https://github.com/facebookresearch/faiss/wiki/Faiss-indexes), [metric documentation](https://github.com/facebookresearch/faiss/wiki/MetricType-and-distances), and [library paper](https://arxiv.org/abs/2401.08281). | Flat inner-product search is exhaustive; cosine retrieval requires normalization; vector search remains an active systems problem. | Context and baseline design reference. Measured comparisons here use NumPy float64, not Faiss float32. No Faiss performance superiority is claimed. |
 
-The contribution is a reviewable engineering realization: contiguous block storage, conservative floating-point bounds, deterministic row-ID ties, a pruning-disabled ablation, validated persistence, explicit resource controls, and reproducible evidence tying results to source. It is not a new geometric theorem, a new clustering algorithm, a complete literature reproduction, or a state-of-the-art claim. NumPy and its BLAS backend supply dense numerical kernels; CapPrune supplies partition construction, bound calculation, traversal, top-k orchestration, and the public execution contract.
+The contribution is a reviewable engineering realization: contiguous block storage, conservative floating-point bounds, deterministic row-ID ties, a pruning-disabled ablation, validated persistence, explicit resource controls, and reproducible evidence tying results to source. It is not a new geometric theorem, a new clustering algorithm, a complete literature reproduction, or a state-of-the-art claim. NumPy supplies the shared rowwise candidate kernel; its BLAS backend still serves other dense operations; CapPrune supplies partition construction, bound calculation, traversal, top-k orchestration, and the public execution contract.
 
-## Research question and frozen acceptance
+## Historical research question and frozen acceptance
 
-**Question:** When does conservative spherical-cap block pruning reduce single-thread CPU latency relative to a contiguous BLAS scan while preserving exact cosine top-k?
+**Historical September question:** When does conservative spherical-cap block pruning reduce single-thread CPU latency relative to a contiguous BLAS scan while preserving exact cosine top-k?
 
 **Hypothesis:** Tight, separated clusters allow many entire blocks to be rejected. Isotropic high-dimensional data yields broad overlapping caps, while small collections leave too little vector work to amortize Python dispatch, bounds, and candidate merging. Increasing k can delay pruning. Build cost makes the mechanism most relevant when many queries reuse an index.
 
@@ -89,7 +91,7 @@ Visit blocks in decreasing U. Keep the best k candidates found so far. A block c
 
 The proof above is in real arithmetic. The implementation uses float64 normalization and dot products, widens s downward and a upward by `64 * eps * d`, then applies final outward slack and `nextafter` to the upper bound. Near ±1, square-root sensitivity makes a final tiny additive score epsilon alone inadequate; widening the cap and angular inputs addresses that failure mode. Scale-first normalization avoids overflow/underflow for finite extreme magnitudes. Zero vectors, NaN, infinity, dimensional mismatch, and invalid k are rejected explicitly.
 
-The practical promise is exact search by this pruning algorithm with the stated float64 agreement tests. It is not a formal interval-arithmetic proof for every possible BLAS implementation and adversarial IEEE-754 input. A finite test suite cannot certify that stronger claim. Small arithmetic differences between dense kernels can also change the ordering of nearly equal mathematical scores; reported equality is relative to the common float64 baseline and declared tie rule. [The walkthrough](WALKTHROUGH.md) maps the formula and guards to the actual implementation.
+The practical promise is exact search by this pruning algorithm with the stated float64 agreement tests. It is not a formal interval-arithmetic proof for every possible BLAS implementation and adversarial IEEE-754 input. A finite test suite cannot certify that stronger claim. The former BLAS calls changed near-tie rankings with matrix shape on valid inputs. Current candidate scoring shares one rowwise kernel across layouts, without clipping or rounding scores. This repairs observed mode disagreement; it does not prove cross-platform bitwise identity or formal interval soundness. [The walkthrough](WALKTHROUGH.md) maps the formula and guards to the actual implementation.
 
 ## Invariants and complexity
 

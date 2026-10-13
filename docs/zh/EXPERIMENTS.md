@@ -1,10 +1,12 @@
 # 实验与证据边界
 
+**源码边界（2026-10-13）：** 修复近似并列一致性后，各模式候选评分统一使用未优化路径的逐行 `einsum` 内核。本页全部10.20倍结果和BLAS扫描比较均属于已存档的9月旧源码，不是当前内核的实测。当前内核性能**尚未测量**。[修复、准确存档和新协议](NUMERICAL_REPAIR.md)。
+
 [English](../en/EXPERIMENTS.md) · [主页](../../README_zh.md) · [研究约定](RESEARCH.md)
 
-## 主要发现
+## 9月历史发现
 
-在本次 Apple M1 Pro CPU 运行中，球冠剪枝在预先指定的**合成聚类 50,000×64、k=10** 工作负载上，相对连续 float64 扫描取得 **10.20× 单查询中位数加速**，平均仅为 **2.34%** 的向量评分。收益强烈依赖数据分布：**真实 digits 的耗时是扫描的 4.40×**，各向同性 50,000×64 为 **1.60×**，32 向量、k=N 边界场景为 **3.69×**。这些负面结果同样包含在交付证据中。这不是预训练嵌入基准，也不是应用端到端结果。
+在9月旧实现的 Apple M1 Pro CPU 运行中，球冠剪枝在预先指定的**合成聚类 50,000×64、k=10** 工作负载上，相对连续 float64 扫描取得 **10.20× 单查询中位数加速**，平均仅为 **2.34%** 的向量评分。收益强烈依赖数据分布：**真实 digits 的耗时是扫描的 4.40×**，各向同性 50,000×64 为 **1.60×**，32 向量、k=N 边界场景为 **3.69×**。这些负面结果同样包含在交付证据中。这不是预训练嵌入基准，也不是应用端到端结果。
 
 ## 记录、源码与环境
 
@@ -34,7 +36,7 @@
 - 合成各向同性场景采用独立高斯向量和查询：50,000×64、k=10、64 簇；以及 32×8、k=32、8 簇的边界场景。
 - `digits_real` 使用 scikit-learn 1.7.2 自带的 `load_digits` 原始 8×8 像素强度。有种子的排列划出 40 条独立查询和 1,757 条库内向量，k=10，32 簇。没有训练模型或嵌入网络，衡量的是数值检索，不是分类精度或语义相关性。[NOTICE](../../NOTICE_zh.md) 保留数据来源归属。
 
-全部模式使用相同的归一化 float64 向量、查询、k、线程请求与确定性分数/ID top-k 函数。`scan` 是实用的连续 NumPy/BLAS 矩阵向量乘加部分选择，不是用 Python 逐行计算的弱基线。`blocked` 使用同一连续分块布局，不计算上界，遍历全部块，用来区分上界剪枝收益与排列、调度和合并开销。`pruned` 计算上界、排序块，并在文档说明的 float64 保守余量下跳过无法竞争的块。
+全部模式使用相同的归一化 float64 向量、查询、k、线程请求与确定性分数/ID top-k 函数。历史实现的 `scan` 是连续 NumPy/BLAS 矩阵向量乘加部分选择，不是用 Python 逐行计算的弱基线。`blocked` 使用同一连续分块布局，不计算上界，遍历全部块，用来区分上界剪枝收益与排列、调度和合并开销。`pruned` 计算上界、排序块，并在文档说明的 float64 保守余量下跳过无法竞争的块。
 
 原始排列为扫描基线保留，连续分块排列支持块遍历，测量时二者存在于同一索引。这是在共享内存预算下比较延迟，不声称剪枝索引比纯扫描实现更省内存。查询矩阵 API 逐条处理，不是大批量 GEMM 基线，也没有比较 Faiss、近似索引或 float32 检索。
 
@@ -106,10 +108,10 @@ k=10 与 k=100 的聚类场景使用不同种子，因此数据不同。它们�
 
 ## 复现与保留证据
 
-完成锁定开发环境安装后，在项目根目录运行：
+以下命令按新协议测量已修复内核，不会重现历史BLAS实现的数值。完成锁定开发环境安装后，在项目根目录运行：
 
 ```sh
-.venv/bin/python benchmark.py --output results/reproduction.json
+PYTHONPATH=src .venv/bin/python benchmark.py --config configs/protocol-rowwise-20261013.json --output results/reproduction.json
 .venv/bin/python scripts/validate_results.py results/reproduction.json
 .venv/bin/python scripts/analyze.py results/reproduction.json --output-dir results/reproduction-analysis
 .venv/bin/python -m pytest -q

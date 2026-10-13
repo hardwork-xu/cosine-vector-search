@@ -6,7 +6,7 @@
 
 ## 已记录的本地历史
 
-以下条目读取自 `git log --format='%h %s'`，哈希对应真实原始本地提交。[公开仓库](https://github.com/hardwork-xu/cosine-vector-search) 的历史独立起始于经过脱敏的源码快照，排除私人 Git 身份元数据。下列及原始证据中的本地哈希作为来源引用保留，不能在公开远端解析；原始历史没有被改写或发布。原始证据中的逐文件 SHA-256 可用于检查公开数值核心与冻结协议和实测文件一致。
+以下条目读取自 `git log --format='%h %s'`，哈希对应真实原始本地提交。[公开仓库](https://github.com/hardwork-xu/cosine-vector-search) 的历史独立起始于经过脱敏的源码快照，排除私人 Git 身份元数据。下列及原始证据中的本地哈希作为来源引用保留，不能在公开远端解析；原始历史没有被改写或发布。原始证据中的逐文件 SHA-256 可用于检查准确存档的历史数值核心与未变的冻结协议和实测文件一致；修复后的当前核心不同。
 
 | 提交 | 实际摘要 | 该阶段完成的工作与验证 |
 |---|---|---|
@@ -64,3 +64,11 @@ uv run python scripts/verify.py
 ## 公开源码与 CI 验证
 
 公开快照 `04ff43063be3cdc353bb0582444742da39be4f6d` 在 Ubuntu 24.04 的 [GitHub Actions](https://github.com/hardwork-xu/cosine-vector-search/actions/runs/35602650743) 中通过 70 项测试、静态/类型检查、wheel/源码包构建、基准冒烟、分析及 Docker 构建和运行。仓库与 README 的匿名请求均返回 HTTP 200，README 字节与该快照一致。公开提交使用已核验账号的隐私提交身份，没有推送原始私人历史。[机器可读证据](../../results/publication.json)补充说明此次发布，原始本地记录保持不变。
+
+## 2026-10-13：近似并列运算修复
+
+在公开基线 `db36700be1005ad2ae023b549eeebc08dd57e129` 复现合法输入的模式不一致：NumPy2.2.6、seed4、101×16、k10。关闭剪枝的路径同样不一致。两条候选评分调用改用同一未优化逐行einsum内核。未改动的核心测试加20项新回归，通过 `PYTHONPATH=src python -m pytest -q tests/test_core.py tests/test_near_ties.py`，共69项通过，未放宽容差。此条仅记录实际发生的一次修复，不虚构研发时长。
+
+旧数值源码逐字节保存，哈希 `ab0afbaa8ee3d63efc43266b8bee249c00514a41ee8fe19f53088d3ebb850aad`。历史结果、原协议及负面结果保持原样。验证器将准确原始结果文件绑定到指定存档；新结果仍绑定当前源码。新命名协议用于随后串行重测，尚未运行；此处不新增性能、构建、远端CI或Release完成声明。见[数值修复](NUMERICAL_REPAIR.md)。
+
+同日本地整合检查使用 Python 3.12.14，通过 `uvx --from uv==0.8.22 uv sync --frozen` 安装锁定依赖（全局 uv 为 0.12.19）。Ruff 0.13.0 格式/lint 和 mypy 1.18.1 通过。`python -m pytest -q -k "not test_benchmark_evidence_roundtrip and not test_failure_preserves_completed_samples"` 共 93 项通过；为遵守跨项目串行测量约定，两项启动计时的测试明确未运行。双语/链接/示例检查验证 22 份文档。历史验证器通过严格存档绑定验收 7 场景/5,880 样本。wheel/sdist 构建通过，包列表检查排除了 `.git`、`.venv`、`RESUME.md` 及 `PROJECT_TALK.md`。以上仅为本地验收；新性能、该两项测试、远端 CI 和 Release 尚未验证。

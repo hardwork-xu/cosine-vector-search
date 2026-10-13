@@ -1,5 +1,7 @@
 # Code walkthrough and maintenance
 
+**Source boundary (2026-10-13):** candidate scoring now uses the same nonoptimized rowwise `einsum` kernel in every mode after a near-tie consistency repair. All 10.20× results and BLAS-scan comparisons on this page belong to the archived September source; they are not measurements of the current kernel. Current-kernel performance is **not yet measured**. [Repair, exact archive and new protocol](NUMERICAL_REPAIR.md).
+
 [简体中文](../zh/WALKTHROUGH.md) · [Home](../../README.md) · [API](ARCHITECTURE.md)
 
 ## Start with a running example
@@ -72,3 +74,7 @@ For a numerical mismatch, retain the seed and exact input first. Compare `scan`,
 For a slowdown, measure work counters and latency separately, then inspect the full raw samples rather than the best repetition. Do not change a frozen target after seeing results. For a persistence failure, reproduce it with a copy of the archive and run the load tests; do not bypass schema or norm validation just to make a file load.
 
 The default tests execute real numerical code and subprocess CLI calls offline. Hardware support, remote CI success, production relevance, and formal floating-point guarantees must not be inferred from those tests. The validated environment and actual experiment outcomes are in [EXPERIMENTS.md](EXPERIMENTS.md); actual development changes and verification history are in [DEVELOPMENT.md](DEVELOPMENT.md).
+
+## Current scoring repair
+
+`_score_rows()` is the shared rowwise dot kernel for both original and packed layouts. `optimize=False` prevents the einsum path from becoming shape-dependent BLAS dispatch. The cap/bound calculations and build-time clustering remain unchanged. `tests/test_near_ties.py` requires identical IDs and scores across modes on near ties and exact duplicates, and verifies persistence plus independent Python sorting. No tolerance was enlarged.

@@ -1,5 +1,7 @@
 # Architecture and API
 
+**Source boundary (2026-10-13):** candidate scoring now uses the same nonoptimized rowwise `einsum` kernel in every mode after a near-tie consistency repair. All 10.20× results and BLAS-scan comparisons on this page belong to the archived September source; they are not measurements of the current kernel. Current-kernel performance is **not yet measured**. [Repair, exact archive and new protocol](NUMERICAL_REPAIR.md).
+
 [简体中文](../zh/ARCHITECTURE.md) · [Home](../../README.md) · [Walkthrough](WALKTHROUGH.md)
 
 ## Scope and data flow
@@ -73,7 +75,7 @@ assert restored.search([1.0, 0.0], k=2).ids.tolist() == [[0, 1]]
 
 ## Search paths and invariants
 
-`scan` performs one contiguous BLAS matrix-vector product and one top-k selection per query. It is a practical exhaustive baseline. `blocked` visits every packed block in storage order and merges candidates after each block; it disables bounds and pruning. `pruned` computes one bound per block, visits blocks in decreasing bound order, and stops only when a block's conservative bound is strictly lower than the current kth score. At least `k` actual candidates must exist before pruning.
+`scan` performs one rowwise `np.einsum("ij,j->i", ..., optimize=False)` scoring pass and one top-k selection per query. The block paths use exactly the same candidate-scoring kernel. It is an exhaustive same-kernel baseline, not the former BLAS baseline. `blocked` visits every packed block in storage order and merges candidates after each block; it disables bounds and pruning. `pruned` computes one bound per block, visits blocks in decreasing bound order, and stops only when a block's conservative bound is strictly lower than the current kth score. At least `k` actual candidates must exist before pruning.
 
 All modes normalize queries, compute actual scores, and use the same top-k routine. They preserve original IDs despite packing. The top-k routine retains every candidate equal to the partition cutoff before applying score/ID ordering. Exact-score ties therefore cannot be lost by an arbitrary partition boundary. Bound equality also cannot justify skipping a block, because that block may contain a smaller original ID.
 

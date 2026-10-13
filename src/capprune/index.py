@@ -64,6 +64,22 @@ def _readonly(array: NDArray[Any]) -> NDArray[Any]:
     return array
 
 
+def _score_rows(vectors: FloatArray, query: FloatArray) -> FloatArray:
+    """Use one rowwise reduction in every layout / 所有布局使用同一逐行归约。
+
+    BLAS matvec may choose different reduction orders for a full matrix and a
+    small block, changing near-tie rankings. Nonoptimized einsum keeps candidate
+    scoring on the same rowwise kernel without a matrix-sized product temporary.
+    BLAS 可能因矩阵大小改变求和顺序，导致近似并列排序变化。禁用 einsum
+    路径优化，统一逐行点积内核，并避免创建与整个矩阵同大的乘积临时数组。
+    This is a computed-float64 score contract, not exact real arithmetic or a
+    cross-NumPy/platform bitwise guarantee. Do not clip or round near-tie scores.
+    这是当前运行时的 float64 分数契约，不是实数精确或跨平台逐位保证；不裁剪
+    或取整近似并列分数。
+    """
+    return np.einsum("ij,j->i", vectors, query, optimize=False)
+
+
 def _topk(scores: FloatArray, ids: IntArray, k: int) -> tuple[FloatArray, IntArray]:
     """Partial selection retaining every cutoff tie / 保留分界处全部并列项。"""
     if len(scores) > k:
@@ -258,9 +274,9 @@ class CapIndex:
         """Return cosine top-k for one row or a matrix, always shaped (nq, k).
 
         返回单向量或查询矩阵的余弦 top-k；结果始终为 (nq, k)。
-        Modes: scan is one full BLAS matvec per query; blocked visits all blocks;
+        Modes: scan scores every row in one pass; blocked visits all blocks;
         pruned skips only blocks whose guarded bound is strictly below cutoff.
-        scan 每条查询执行全库矩阵向量乘；blocked 遍历全块；pruned 保守剪枝。
+        scan 每条查询逐行计算全库分数；blocked 遍历全块；pruned 保守剪枝。
         ``1 <= k <= size``; empty batches are valid. Queries are normalized and
         must be finite, nonzero and dimension-compatible. No input is mutated.
         k 必须位于 [1,size]；允许空查询批次；查询须有限非零且维度匹配，不修改输入。
@@ -283,7 +299,9 @@ class CapIndex:
         )
         for row, query in enumerate(normalized):
             if mode == "scan":
-                scores[row], ids[row] = _topk(self._vectors @ query, original_ids, limit)
+                scores[row], ids[row] = _topk(
+                    _score_rows(self._vectors, query), original_ids, limit
+                )
                 evaluated[row] = self.size
                 visited[row] = self.n_clusters
                 continue
@@ -302,7 +320,7 @@ class CapIndex:
                 if len(best_scores) == limit and upper[block] < best_scores[-1]:
                     break
                 start, stop = self._offsets[block : block + 2]
-                block_scores = self._blocked[start:stop] @ query
+                block_scores = _score_rows(self._blocked[start:stop], query)
                 best_scores, best_ids = _topk(
                     np.concatenate((best_scores, block_scores)),
                     np.concatenate((best_ids, self._order[start:stop])),
