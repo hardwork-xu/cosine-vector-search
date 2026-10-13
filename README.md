@@ -18,7 +18,7 @@ The contribution is a complete CPU implementation of block construction, conserv
 
 ## Scope and status
 
-**2026-10-13 numerical repair:** legal near-tie inputs exposed scan/block score-order differences. All modes now share one rowwise scoring kernel. The focused core/regression suite passes 69 tests locally; current-kernel performance and remote CI have not yet been revalidated. All performance tables below, including 10.20×, describe the archived September source only. [Repair and new measurement protocol](docs/en/NUMERICAL_REPAIR.md).
+**2026-10-13 numerical repair:** legal near-tie inputs exposed scan/block score-order differences. All modes now share one rowwise scoring kernel. The 69 focused core/regression tests passed; all 95 tests passed locally across two invocations. A separate eight-workload run measures the repaired kernel below; remote CI for this change remains unverified. Historical tables, including 10.20×, describe the archived September source only. [Repair and new measurement results](docs/en/NUMERICAL_REPAIR.md).
 
 **Historical September validation:** Validated locally on macOS 26.6.2 arm64, Apple M1 Pro, 16 GiB, Python 3.12.2, NumPy 2.2.6 / Accelerate: all three search paths (`scan`, `blocked`, `pruned`), API, bilingual CLI, offline demo, atomic save/reload, 70 tests and package installation. [GitHub Actions on Ubuntu 24.04](https://github.com/hardwork-xu/cosine-vector-search/actions/runs/35602650743) also passed the same 70-test suite, static/type checks, package build, benchmark smoke, plot generation, and Docker build/run. Python 3.12 is the declared version range. Full performance measurements remain macOS-only; CI smoke is not a Linux performance claim. See [publication evidence](results/publication.json). No GPU backend, online updates, sparse vectors, embedding model or service is provided.
 
@@ -84,6 +84,27 @@ PYTHONPATH=src .venv/bin/python benchmark.py --config configs/protocol-rowwise-2
 ```
 
 Empty query batches are accepted; empty indexes, zero/nonfinite vectors, invalid dimensions, invalid budgets and k outside `[1,N]` are rejected. Index loading disables pickle and reconstructs bound metadata. Load only trusted-size files: decompression memory is not sandboxed. Full contracts and error behavior are in [ARCHITECTURE.md](docs/en/ARCHITECTURE.md).
+
+## Corrected kernel: October 13 measurements
+
+Run `8e769ab6-6fed-4176-925f-8e49e855e75a` on source `9524ad45d6a8039e814af9671a34c25d573960dd` used Apple M1 Pro arm64, Darwin 25.6.0, Python 3.12.14, NumPy 2.2.6, float64, online batch=1 and a requested one-thread budget. **Scan and pruning use the same nonoptimized rowwise scoring kernel**; no optimized BLAS/native baseline was timed for this version. The prespecified primary target (≥1.50×) and scoring target (≤30%) were met only for their named synthetic primary workload: **10.83× and 2.34265%**.
+
+There are **8 workload cases, one dataset seed per case, 40 query indices per case, 7 repetitions and 3 modes**: 6,720 timed calls, not 6,720 independent samples. All ordered IDs agreed and the observed maximum score error was zero under `atol=rtol=0`. Medians below pool the 280 timings per mode/case. These are descriptive single-host results, without confidence intervals or statistical-significance claims.
+
+| Case / 场景 | Scan ms | Blocked ms | Pruned ms | Speedup / 加速比 | Scored / 评分比例 | Build ms |
+|---|---:|---:|---:|---:|---:|---:|
+| clustered_n5000_d64 | 0.1298 | 0.3631 | 0.0475 | 2.73× | 4.9% | 20.5 |
+| clustered_n50000_d64 | 1.1020 | 1.6649 | 0.1018 | 10.83× | 2.3% | 164.0 |
+| clustered_n50000_d128 | 2.1848 | 2.6279 | 0.1469 | 14.88× | 3.1% | 301.1 |
+| isotropic_n50000_d64 | 1.1599 | 1.6343 | 1.6891 | 0.69× | 100.0% | 165.0 |
+| clustered_n50000_k100 | 1.1322 | 1.8732 | 0.1135 | 9.97× | 2.8% | 158.5 |
+| digits_real | 0.0582 | 0.2958 | 0.2711 | 0.21× | 84.4% | 6.5 |
+| tiny_k_equals_n | 0.0175 | 0.0561 | 0.0689 | 0.25× | 100.0% | 1.6 |
+| clustered_n500_d64 | 0.0316 | 0.1429 | 0.0378 | 0.84× | 8.3% | 2.2 |
+
+Digits, isotropic data, tiny k=N and the new 500-row case were **slower** under pruning (approximately 4.66×, 1.46×, 3.94× and 1.20× the scan latency). Even 8.27% scoring in the 500-row case did not repay overhead. The native/BLAS comparison, real embedding retrieval and multi-seed/multi-host validation remain missing. Do not compare 10.83× numerically with the historical 10.20× as evidence that the repair improved speed: their kernels and measurement runs differ.
+
+This table is copied from [generated results](results/rowwise-20261013-analysis/table_en.md), derived from [raw data](results/rowwise-20261013.json). [Repair report](docs/en/NUMERICAL_REPAIR.md) records source identity, protocol, costs and limits; [all statistics](results/rowwise-20261013-analysis/summary.json) retain quartiles and per-repeat medians.
 
 ## Historical September targets and results
 

@@ -69,6 +69,12 @@ uv run python scripts/verify.py
 
 在公开基线 `db36700be1005ad2ae023b549eeebc08dd57e129` 复现合法输入的模式不一致：NumPy2.2.6、seed4、101×16、k10。关闭剪枝的路径同样不一致。两条候选评分调用改用同一未优化逐行einsum内核。未改动的核心测试加20项新回归，通过 `PYTHONPATH=src python -m pytest -q tests/test_core.py tests/test_near_ties.py`，共69项通过，未放宽容差。此条仅记录实际发生的一次修复，不虚构研发时长。
 
-旧数值源码逐字节保存，哈希 `ab0afbaa8ee3d63efc43266b8bee249c00514a41ee8fe19f53088d3ebb850aad`。历史结果、原协议及负面结果保持原样。验证器将准确原始结果文件绑定到指定存档；新结果仍绑定当前源码。新命名协议用于随后串行重测，尚未运行；此处不新增性能、构建、远端CI或Release完成声明。见[数值修复](NUMERICAL_REPAIR.md)。
+旧数值源码逐字节保存，哈希 `ab0afbaa8ee3d63efc43266b8bee249c00514a41ee8fe19f53088d3ebb850aad`。历史结果、原协议及负面结果保持原样。验证器将准确原始结果文件绑定到指定存档；新结果仍绑定当前源码。此准备检查点的新命名协议尚未运行；随后真实测量记于下方，此处不回填性能或远端 CI/Release 完成声明。见[数值修复](NUMERICAL_REPAIR.md)。
 
-同日本地整合检查使用 Python 3.12.14，通过 `uvx --from uv==0.8.22 uv sync --frozen` 安装锁定依赖（全局 uv 为 0.12.19）。Ruff 0.13.0 格式/lint 和 mypy 1.18.1 通过。`python -m pytest -q -k "not test_benchmark_evidence_roundtrip and not test_failure_preserves_completed_samples"` 共 93 项通过；为遵守跨项目串行测量约定，两项启动计时的测试明确未运行。双语/链接/示例检查验证 22 份文档。历史验证器通过严格存档绑定验收 7 场景/5,880 样本。wheel/sdist 构建通过，包列表检查排除了 `.git`、`.venv`、`RESUME.md` 及 `PROJECT_TALK.md`。以上仅为本地验收；新性能、该两项测试、远端 CI 和 Release 尚未验证。
+同日本地整合检查使用 Python 3.12.14，通过 `uvx --from uv==0.8.22 uv sync --frozen` 安装锁定依赖（全局 uv 为 0.12.19）。Ruff 0.13.0 格式/lint 和 mypy 1.18.1 通过。`python -m pytest -q -k "not test_benchmark_evidence_roundtrip and not test_failure_preserves_completed_samples"` 共 93 项通过；为遵守跨项目串行测量约定，两项启动计时的测试明确未运行。双语/链接/示例检查验证 22 份文档。历史验证器通过严格存档绑定验收 7 场景/5,880 样本。wheel/sdist 构建通过，包列表检查排除了 `.git`、`.venv`、`RESUME.md` 及 `PROJECT_TALK.md`。该检查点只包括本地非计时验收；随后性能及两项暂缓测试记录于下方。本次变更的远端 CI 和 Release 尚未验证。
+
+### 同日实测检查点
+
+在干净被测源码 `9524ad45d6a8039e814af9671a34c25d573960dd` 上运行 `python benchmark.py --config configs/protocol-rowwise-20261013.json --output results/rowwise-20261013.json`，开始/结束时间为 `2026-10-13T04:07:00.492074+00:00` / `2026-10-13T04:07:11.638118+00:00`。运行 `8e769ab6-6fed-4176-925f-8e49e855e75a` 的全部 8 场景、6,720 次重复计时调用通过，最大分数误差 0。`scripts/validate_results.py` 将全部被测源码绑定当前树；独立重算核验全部模式中位数、评分比例、场景比值及原七场景输入哈希/种子不变。`scripts/analyze.py ... --output-dir results/rowwise-20261013-analysis` 生成完整八行表格及图。主场景共享内核比值 10.83 倍，保留 digits/各向同性/tiny/500 行不利结果。[完整边界解释](NUMERICAL_REPAIR.md)。
+
+正式运行后执行 `python -m pytest -q tests/test_benchmark.py::test_benchmark_evidence_roundtrip tests/test_benchmark.py::test_failure_preserves_completed_samples`，两项测试 2.79 秒通过。与此前同一未变源码的 93 项合计，全部 95 项分两次调用通过。只更新生成分析与文档，未改数值源码、协议、基准或测试。这不宣称原生基线优势、科学新颖性、外部验证或远端 CI/Release。

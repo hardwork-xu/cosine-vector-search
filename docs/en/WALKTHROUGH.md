@@ -1,6 +1,6 @@
 # Code walkthrough and maintenance
 
-**Source boundary (2026-10-13):** candidate scoring now uses the same nonoptimized rowwise `einsum` kernel in every mode after a near-tie consistency repair. All 10.20× results and BLAS-scan comparisons on this page belong to the archived September source; they are not measurements of the current kernel. Current-kernel performance is **not yet measured**. [Repair, exact archive and new protocol](NUMERICAL_REPAIR.md).
+**Source boundary (2026-10-13):** candidate scoring now uses the same nonoptimized rowwise `einsum` kernel in every mode after a near-tie consistency repair. All 10.20× results and BLAS-scan comparisons on this page belong to the archived September source; they are not measurements of the current kernel. The corrected kernel now has a separate eight-workload internal B/C run; its primary result is **10.83× against the shared rowwise scan**, with four slower workloads. This is not a native BLAS comparison. [Repair, exact archive and new results](NUMERICAL_REPAIR.md).
 
 [简体中文](../zh/WALKTHROUGH.md) · [Home](../../README.md) · [API](ARCHITECTURE.md)
 

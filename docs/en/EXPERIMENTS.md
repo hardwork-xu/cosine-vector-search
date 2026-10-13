@@ -1,8 +1,25 @@
 # Experiments and limits of the evidence
 
-**Source boundary (2026-10-13):** candidate scoring now uses the same nonoptimized rowwise `einsum` kernel in every mode after a near-tie consistency repair. All 10.20× results and BLAS-scan comparisons on this page belong to the archived September source; they are not measurements of the current kernel. Current-kernel performance is **not yet measured**. [Repair, exact archive and new protocol](NUMERICAL_REPAIR.md).
+**Source boundary (2026-10-13):** candidate scoring now uses the same nonoptimized rowwise `einsum` kernel in every mode after a near-tie consistency repair. All 10.20× results and BLAS-scan comparisons on this page belong to the archived September source; they are not measurements of the current kernel. The corrected kernel now has a separate eight-workload internal B/C run; its primary result is **10.83× against the shared rowwise scan**, with four slower workloads. This is not a native BLAS comparison. [Repair, exact archive and new results](NUMERICAL_REPAIR.md).
 
 [简体中文](../zh/EXPERIMENTS.md) · [Home](../../README.md) · [Research contract](RESEARCH.md)
+
+## Corrected-kernel run on 2026-10-13
+
+[Raw run `8e769ab6-6fed-4176-925f-8e49e855e75a`](../../results/rowwise-20261013.json), source `9524ad45d6a8039e814af9671a34c25d573960dd`: 8 workloads, one dataset seed and 40 query indices per case; 7 repetitions ×3 modes yield 6,720 timed calls, not independent samples. All cases had identical ordered IDs and zero observed score error. The shared-rowwise-kernel primary ratio is **10.83×**, with **2.34265%** scoring; the two prespecified targets passed on this synthetic primary case. This is not the historical BLAS comparison, nor a new native/BLAS measurement.
+
+| Case / 场景 | Scan ms | Blocked ms | Pruned ms | Speedup / 加速比 | Scored / 评分比例 | Build ms |
+|---|---:|---:|---:|---:|---:|---:|
+| clustered_n5000_d64 | 0.1298 | 0.3631 | 0.0475 | 2.73× | 4.9% | 20.5 |
+| clustered_n50000_d64 | 1.1020 | 1.6649 | 0.1018 | 10.83× | 2.3% | 164.0 |
+| clustered_n50000_d128 | 2.1848 | 2.6279 | 0.1469 | 14.88× | 3.1% | 301.1 |
+| isotropic_n50000_d64 | 1.1599 | 1.6343 | 1.6891 | 0.69× | 100.0% | 165.0 |
+| clustered_n50000_k100 | 1.1322 | 1.8732 | 0.1135 | 9.97× | 2.8% | 158.5 |
+| digits_real | 0.0582 | 0.2958 | 0.2711 | 0.21× | 84.4% | 6.5 |
+| tiny_k_equals_n | 0.0175 | 0.0561 | 0.0689 | 0.25× | 100.0% | 1.6 |
+| clustered_n500_d64 | 0.0316 | 0.1429 | 0.0378 | 0.84× | 8.3% | 2.2 |
+
+All eight cases are shown, including four slower-than-scan cases. These values come from the [generated table](../../results/rowwise-20261013-analysis/table_en.md); [the repair report](NUMERICAL_REPAIR.md#recorded-october-13-result) gives environment, measured scope, construction/persistence costs, same-data-source checks and limitations. Do not pool these timings with September. The following sections retain the historical September record.
 
 ## Historical September finding
 
